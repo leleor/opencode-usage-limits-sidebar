@@ -18,12 +18,6 @@
     "url": "git+https://github.com/leleor/opencode-usage-limits-sidebar.git"
   },
   "homepage": "https://github.com/leleor/opencode-usage-limits-sidebar#readme",
-  "publishConfig": {
-    "access": "public"
-  },
-  "files": [
-    "dist"
-  ],
   "engines": {
     "opencode": ">=1.0.0"
   },
@@ -53,15 +47,16 @@
   "scripts": {
     "clean": "node -e \"require('fs').rmSync('dist', {recursive: true, force: true})\"",
     "build": "npm run clean && tsc",
+    "prepare": "npm run build",
     "dev": "opencode plugin dev",
     "test": "npm run build && vitest run",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
     "@opencode-ai/plugin": ">=1.2.0",
-    "@opentui/core": "^0.4.5",
-    "@opentui/solid": "^0.4.5",
-    "solid-js": "^1.8.0"
+    "@opentui/core": ">=0.4.5",
+    "@opentui/solid": ">=0.4.5",
+    "solid-js": ">=1.8.0"
   },
   "devDependencies": {
     "@opencode-ai/plugin": "^1.18.0",

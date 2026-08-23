@@ -21,21 +21,17 @@ It displays the three plan windows â€” **5 hours**, **weekly** and **monthly** â
 
 ## Installation
 
-### From npm (recommended)
+### From GitHub
 
-Add the plugin to your TUI config `~/.config/opencode/tui.json`:
+Add the repository to your TUI config `~/.config/opencode/tui.json`:
 
 ```json
 {
-  "plugin": ["opencode-usage-limits-sidebar"]
+  "plugin": ["git+https://github.com/leleor/opencode-usage-limits-sidebar.git"]
 }
 ```
 
-Or install it with the CLI, which writes the config for you:
-
-```shell
-opencode plugin opencode-usage-limits-sidebar -g
-```
+The package builds itself on install (the `prepare` script compiles the plugin automatically). OpenCode must have Git available on your system.
 
 Restart OpenCode. The `OPENCODE GO` block appears in the sidebar.
 
