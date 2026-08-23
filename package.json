@@ -1,0 +1,73 @@
+{
+  "name": "opencode-usage-limits-sidebar",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "description": "OpenCode TUI plugin that shows OpenCode Go subscription usage in the sidebar using the official usage API",
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "sidebar",
+    "tui",
+    "usage",
+    "limits",
+    "opencode-go"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leleor/opencode-usage-limits-sidebar.git"
+  },
+  "homepage": "https://github.com/leleor/opencode-usage-limits-sidebar#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "opencode": ">=1.0.0"
+  },
+  "main": "./dist/server.js",
+  "types": "./dist/server.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js",
+      "config": {
+        "enabled": true
+      }
+    },
+    "./tui": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.jsx",
+      "config": {
+        "enabled": true,
+        "sidebar": true
+      }
+    }
+  },
+  "scripts": {
+    "clean": "node -e \"require('fs').rmSync('dist', {recursive: true, force: true})\"",
+    "build": "npm run clean && tsc",
+    "dev": "opencode plugin dev",
+    "test": "npm run build && vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": ">=1.2.0",
+    "@opentui/core": "^0.4.5",
+    "@opentui/solid": "^0.4.5",
+    "solid-js": "^1.8.0"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.18.0",
+    "@opencode-ai/sdk": "^1.18.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.2",
+    "vitest": "^4.1.2"
+  }
+}
