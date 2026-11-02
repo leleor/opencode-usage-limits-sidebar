@@ -17,7 +17,7 @@ describe("fetchUsage response parsing", () => {
       usage: {
         rolling: { status: "ok", percent: 19.5, resetsAt },
         weekly: { status: "ok", percent: 29.7, resetsAt },
-        monthly: { status: "ok", percent: 25.0, resetsAt },
+        monthly: { status: "rate-limited", percent: 100, resetsAt },
       },
     }
 
@@ -32,11 +32,13 @@ describe("fetchUsage response parsing", () => {
     expect(windows[0].used).toBeCloseTo(2.34)
     expect(windows[0].limit).toBe(12)
     expect(windows[0].resetsAt).toBeGreaterThan(Date.now())
+    expect(windows[0].limited).toBe(false)
 
     expect(windows[1].kind).toBe("weekly")
     expect(windows[1].used).toBeCloseTo(8.91)
     expect(windows[2].kind).toBe("monthly")
-    expect(windows[2].used).toBeCloseTo(15.0)
+    expect(windows[2].used).toBeCloseTo(60.0)
+    expect(windows[2].limited).toBe(true)
   })
 
   it("throws when the response shape is unexpected", async () => {
@@ -46,7 +48,23 @@ describe("fetchUsage response parsing", () => {
     await expect(fetchUsage("sk-test", config)).rejects.toThrow("unexpected shape")
   })
 
-  it("throws on 401", async () => {
+  it("throws the API error message on 401", async () => {
+    globalThis.fetch = (async () =>
+      Response.json(
+        {
+          error: {
+            type: "authentication_error",
+            code: "api_key_expired",
+            message: "This API key has expired.",
+          },
+        },
+        { status: 401 },
+      )) as unknown as typeof fetch
+
+    await expect(fetchUsage("sk-test", config)).rejects.toThrow("This API key has expired.")
+  })
+
+  it("throws a generic error when a 401 has no JSON body", async () => {
     globalThis.fetch = (async () =>
       new Response("Unauthorized", { status: 401 })) as unknown as typeof fetch
 

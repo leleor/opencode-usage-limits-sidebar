@@ -38,7 +38,27 @@ function toWindow(kind: WindowKind, label: string, window: UsageWindow, limit: n
     limit,
     percent: window.percent,
     resetsAt: resetsAtMs(window.resetsAt),
+    limited: window.status === "rate-limited",
   }
+}
+
+function apiErrorMessage(body: string): string | undefined {
+  try {
+    const parsed: unknown = JSON.parse(body)
+    if (typeof parsed !== "object" || parsed === null) return undefined
+
+    const error = (parsed as { error?: unknown }).error
+    if (typeof error === "object" && error !== null) {
+      const message = (error as { message?: unknown }).message
+      if (typeof message === "string" && message.length > 0) return message
+    }
+
+    const message = (parsed as { message?: unknown }).message
+    if (typeof message === "string" && message.length > 0) return message
+  } catch {
+    // The body was not JSON.
+  }
+  return undefined
 }
 
 export async function fetchUsage(apiKey: string, config: LimitsConfig): Promise<WindowUsage[]> {
@@ -62,12 +82,12 @@ export async function fetchUsage(apiKey: string, config: LimitsConfig): Promise<
     clearTimeout(timeout)
   }
 
-  if (response.status === 401) {
-    throw new Error("Invalid OpenCode Go API key")
-  }
-
   if (!response.ok) {
-    throw new Error(`Usage API returned ${response.status}`)
+    const detail = apiErrorMessage(await response.text())
+    if (response.status === 401) {
+      throw new Error(detail ?? "Invalid OpenCode Go API key")
+    }
+    throw new Error(detail ?? `Usage API returned ${response.status}`)
   }
 
   const data: unknown = await response.json()

@@ -1,15 +1,37 @@
 import type { RGBA } from "@opentui/core"
 
-export type ColorValue = RGBA | string
+export type ColorValue = RGBA
 
 export const USED_COLUMN_WIDTH = 5
 export const RESET_COLUMN_WIDTH = 7
 export const REFRESH_INTERVAL_MS = 30_000
-export const SIDEBAR_ORDER = 50
 
 const MINUTE_MS = 60 * 1000
 const HOUR_MS = 60 * MINUTE_MS
 const TWO_DAYS_MS = 2 * 24 * HOUR_MS
+
+export interface ThemeTokens {
+  text: {
+    base: RGBA
+    muted: RGBA
+    action: {
+      primary: {
+        base: RGBA
+      }
+    }
+    feedback: {
+      warning: {
+        base: RGBA
+      }
+      error: {
+        base: RGBA
+      }
+    }
+  }
+  border: {
+    base: RGBA
+  }
+}
 
 export interface Palette {
   subtle: ColorValue
@@ -17,21 +39,17 @@ export interface Palette {
   muted: ColorValue
   accent: ColorValue
   warning: ColorValue
+  error: ColorValue
 }
 
-export const getPalette = (theme: Record<string, unknown>): Palette => {
-  const get = (name: string, fallback: string): ColorValue => {
-    const value = theme[name]
-    if (typeof value === "string") return value
-    if (value && typeof value === "object") return value as RGBA
-    return fallback
-  }
+export const getPalette = (theme: ThemeTokens): Palette => {
   return {
-    subtle: get("borderSubtle", "#2a2a2a"),
-    text: get("text", "#f0f0f0"),
-    muted: get("textMuted", "#a5a5a5"),
-    accent: get("primary", "#5f87ff"),
-    warning: get("warning", "#d7a94b"),
+    subtle: theme.border.base,
+    text: theme.text.base,
+    muted: theme.text.muted,
+    accent: theme.text.action.primary.base,
+    warning: theme.text.feedback.warning.base,
+    error: theme.text.feedback.error.base,
   }
 }
 

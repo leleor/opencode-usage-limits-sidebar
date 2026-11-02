@@ -1,10 +1,10 @@
 /** @jsxImportSource @opentui/solid */
 import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
-import type { TuiEventBus, TuiPlugin } from "@opencode-ai/plugin/tui"
+import { Plugin } from "@opencode/plugin/tui"
+import type { Context } from "@opencode/plugin/tui/context"
 import {
   REFRESH_INTERVAL_MS,
   RESET_COLUMN_WIDTH,
-  SIDEBAR_ORDER,
   USED_COLUMN_WIDTH,
   formatUsd,
   getPalette,
@@ -31,7 +31,6 @@ function ProgressBar(props: { percent: number; fg: ColorValue; bg: ColorValue })
 function LimitRow(props: {
   palette: Palette
   line: WindowUsage
-  limitReached: boolean
 }) {
   const pct = clampedPercent(props.line.percent)
   return (
@@ -41,7 +40,7 @@ function LimitRow(props: {
           <text fg={props.palette.text}>{props.line.label}</text>
         </box>
         <box width={USED_COLUMN_WIDTH} justifyContent="flex-end">
-          <text fg={props.limitReached ? props.palette.warning : props.palette.text}>
+          <text fg={props.line.limited ? props.palette.warning : props.palette.text}>
             {rightAlign(`${pct}%`, USED_COLUMN_WIDTH)}
           </text>
         </box>
@@ -54,7 +53,7 @@ function LimitRow(props: {
       <box marginTop={1}>
         <ProgressBar
           percent={pct}
-          fg={props.limitReached ? props.palette.warning : props.palette.accent}
+          fg={props.line.limited ? props.palette.warning : props.palette.accent}
           bg={props.palette.subtle}
         />
       </box>
@@ -62,7 +61,7 @@ function LimitRow(props: {
         <text fg={props.palette.muted}>
           {formatUsd(props.line.used)} / {formatUsd(props.line.limit)}
         </text>
-        <Show when={props.limitReached}>
+        <Show when={props.line.limited}>
           <text fg={props.palette.warning} marginLeft={1}>
             <b>LIMIT</b>
           </text>
@@ -73,26 +72,22 @@ function LimitRow(props: {
 }
 
 function SidebarLimits(props: {
-  theme: Record<string, unknown>
+  context: Context
   config: LimitsConfig
-  event: TuiEventBus
 }) {
-  const palette = createMemo(() => getPalette(props.theme))
+  const palette = createMemo(() => getPalette(props.context.theme))
   const [windows, setWindows] = createSignal<WindowUsage[]>([])
   const [loading, setLoading] = createSignal(true)
   const [errorMsg, setErrorMsg] = createSignal("")
-  const [limitReached, setLimitReached] = createSignal<Record<WindowKind, boolean>>({
-    hour5: false,
-    weekly: false,
-    monthly: false,
-  })
+  let refreshing = false
 
   const refresh = async () => {
+    if (refreshing) return
+    refreshing = true
     try {
       const key = await resolveApiKey(props.config.provider, props.config.apiKey)
       if (!key) {
         setErrorMsg("OpenCode Go API key not found")
-        setLoading(false)
         return
       }
 
@@ -102,31 +97,30 @@ function SidebarLimits(props: {
       const message = error instanceof Error ? error.message : "unknown error"
       setErrorMsg(message)
     } finally {
+      refreshing = false
       setLoading(false)
     }
+  }
+
+  const refreshOnRateLimit = (error: { status?: number }) => {
+    if (error.status === 429) void refresh()
   }
 
   onMount(() => {
     void refresh()
     const timer = setInterval(() => void refresh(), props.config.refreshMs)
-    onCleanup(() => clearInterval(timer))
-  })
-
-  onMount(() => {
-    const off = props.event.on("session.error", (ev) => {
-      const errorData = (ev.properties?.error as
-        | { data?: { statusCode?: number; metadata?: Record<string, string> } }
-        | undefined)?.data
-      if (errorData?.statusCode === 429 && errorData.metadata?.limitName) {
-        const name = errorData.metadata.limitName.toLowerCase()
-        let kind: WindowKind | undefined
-        if (name.includes("hour") || name.includes("5h")) kind = "hour5"
-        else if (name.includes("week")) kind = "weekly"
-        else if (name.includes("month")) kind = "monthly"
-        if (kind) setLimitReached((prev) => ({ ...prev, [kind]: true }))
-      }
+    const offFailed = props.context.data.on("session.execution.failed", (event) => {
+      refreshOnRateLimit(event.data.error)
     })
-    onCleanup(off)
+    const offRetry = props.context.data.on("session.retry.scheduled", (event) => {
+      refreshOnRateLimit(event.data.error)
+    })
+
+    onCleanup(() => {
+      clearInterval(timer)
+      offFailed()
+      offRetry()
+    })
   })
 
   return (
@@ -140,17 +134,13 @@ function SidebarLimits(props: {
         </Show>
       </box>
       <Show when={errorMsg()}>
-        <text fg={palette().warning}>{errorMsg()}</text>
+        <text fg={palette().error} wrapMode="word">
+          {errorMsg()}
+        </text>
       </Show>
       <Show when={windows().length > 0}>
         <For each={windows()}>
-          {(line) => (
-            <LimitRow
-              palette={palette()}
-              line={line}
-              limitReached={!!limitReached()[line.kind]}
-            />
-          )}
+          {(line) => <LimitRow palette={palette()} line={line} />}
         </For>
       </Show>
       <Show when={loading() && windows().length === 0}>
@@ -160,36 +150,41 @@ function SidebarLimits(props: {
   )
 }
 
+const DEFAULT_LIMITS: Record<WindowKind, number> = {
+  hour5: 12,
+  weekly: 30,
+  monthly: 60,
+}
+
 const DEFAULT_CONFIG: LimitsConfig = {
   provider: "opencode-go",
   baseUrl: DEFAULT_BASE_URL,
   refreshMs: REFRESH_INTERVAL_MS,
   timeoutMs: 10000,
-  limits: { hour5: 12, weekly: 30, monthly: 60 },
+  limits: DEFAULT_LIMITS,
 }
 
-const tui: TuiPlugin = (api, options) => {
-  const config: LimitsConfig = {
-    ...DEFAULT_CONFIG,
-    ...((options ?? {}) as Partial<LimitsConfig>),
-  }
+export default Plugin.define({
+  id: "opencode-usage-limits-sidebar",
+  setup(context) {
+    const options = (context.options ?? {}) as Partial<LimitsConfig>
+    const refreshMs =
+      typeof options.refreshMs === "number" &&
+      Number.isFinite(options.refreshMs) &&
+      options.refreshMs >= 1000
+        ? options.refreshMs
+        : DEFAULT_CONFIG.refreshMs
 
-  api.slots.register({
-    order: SIDEBAR_ORDER,
-    slots: {
-      sidebar_content(ctx) {
-        return (
-          <SidebarLimits
-            theme={ctx.theme.current as unknown as Record<string, unknown>}
-            config={config}
-            event={api.event}
-          />
-        )
-      },
-    },
-  })
+    const config: LimitsConfig = {
+      ...DEFAULT_CONFIG,
+      ...options,
+      refreshMs,
+      limits: { ...DEFAULT_LIMITS, ...(options.limits ?? {}) },
+    }
 
-  return Promise.resolve()
-}
-
-export default { id: "opencode-usage-limits-sidebar", tui }
+    return context.ui.slot({
+      append: "sidebar.content",
+      render: () => <SidebarLimits context={context} config={config} />,
+    })
+  },
+})

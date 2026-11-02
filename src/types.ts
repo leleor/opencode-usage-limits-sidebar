@@ -36,4 +36,5 @@ export interface WindowUsage {
   limit: number
   percent: number
   resetsAt: number | null
+  limited: boolean
 }

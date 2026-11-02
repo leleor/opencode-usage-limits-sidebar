@@ -11,29 +11,37 @@ It displays the three plan windows — **5 hours**, **weekly** and **monthly** �
 - **Spent / limit** amounts in USD
 - **Estimated reset** time for each window
 - **Auto-refresh** every 30 seconds (configurable)
-- **Limit reached detection** — marks the window as `LIMIT` when the gateway returns HTTP 429 with a `limitName` metadata
+- **Limit reached detection** — marks the window as `LIMIT` when the usage API reports the window as rate-limited
 - **Theme aware** — colors follow the active OpenCode theme
 
 ## Requirements
 
-- OpenCode >= 1.3.13
-- Active OpenCode Go subscription and API key
+- OpenCode >= 2.0.0 (V2 plugin API)
+- OpenCode Go subscription and API key
+
+> OpenCode 1.x uses the old plugin API. Version 0.2.0 and later of this plugin target OpenCode 2.x.
 
 ## Installation
 
 ### From GitHub
 
-Add the repository to your TUI config `~/.config/opencode/tui.json`:
+The V2 TUI client reads its plugin list from `~/.config/opencode/cli.json`. Add the repository there:
 
 ```json
 {
-  "plugin": ["git+https://github.com/leleor/opencode-usage-limits-sidebar.git"]
+  "plugins": ["git+https://github.com/leleor/opencode-usage-limits-sidebar.git"]
 }
+```
+
+Alternatively, install it with the OpenCode CLI:
+
+```shell
+opencode plugin add git+https://github.com/leleor/opencode-usage-limits-sidebar.git
 ```
 
 The package builds itself on install (the `prepare` script compiles the plugin automatically). OpenCode must have Git available on your system.
 
-Restart OpenCode. The `OPENCODE GO` block appears in the sidebar.
+Reload OpenCode (`/reload` or `opencode reload`) or restart it. The `OPENCODE GO` block appears in the sidebar.
 
 ### From source
 
@@ -42,29 +50,42 @@ git clone https://github.com/leleor/opencode-usage-limits-sidebar.git
 cd opencode-usage-limits-sidebar
 npm install
 npm run build
-opencode plugin "$PWD" -g
 ```
 
-Restart OpenCode.
+Then add the absolute path to your `~/.config/opencode/cli.json`:
+
+```json
+{
+  "plugins": ["C:/Users/you/Projects/opencode-usage-limits-sidebar"]
+}
+```
+
+Reload or restart OpenCode.
 
 ## Usage
 
 No configuration is required — the plugin reads your OpenCode Go API key from OpenCode's auth store (`~/.local/share/opencode/auth.json`) and queries the official usage endpoint.
 
-To customize, add options to the plugin entry in your `tui.json`:
+To customize, use the object form in `cli.json`:
 
 ```json
 {
-  "plugin": [
-    ["opencode-usage-limits-sidebar", {
-      "baseUrl": "https://opencode.ai/zen/go/v1",
-      "refreshMs": 30000,
-      "timeoutMs": 10000,
-      "limits": { "hour5": 12, "weekly": 30, "monthly": 60 }
-    }]
+  "plugins": [
+    {
+      "package": "opencode-usage-limits-sidebar",
+      "options": {
+        "provider": "opencode-go",
+        "baseUrl": "https://opencode.ai/zen/go/v1",
+        "refreshMs": 30000,
+        "timeoutMs": 10000,
+        "limits": { "hour5": 12, "weekly": 30, "monthly": 60 }
+      }
+    }
   ]
 }
 ```
+
+When loading from a local directory, use the absolute path as `package`.
 
 ### Configuration options
 
@@ -82,6 +103,8 @@ To customize, add options to the plugin entry in your `tui.json`:
 1. `apiKey` option in the plugin config
 2. `OPENCODE_GO_API_KEY` environment variable
 3. OpenCode auth store at `~/.local/share/opencode/auth.json` (provider `opencode-go`)
+
+If the API rejects the key (for example, an expired key or an account without an active subscription), the sidebar shows the error returned by the API.
 
 ## How it works
 
@@ -104,18 +127,17 @@ The API returns the percentage used and reset time for each window:
 }
 ```
 
-The plugin uses the plan limits ($12 / $30 / $60) to estimate the spent amount from the reported percentage. The limits are configurable via the `limits` option if they change.
+The plugin uses the plan limits ($12 / $30 / $60) to estimate the spent amount from the reported percentage. The limits are configurable via the `limits` option if they change. A window whose `status` is `rate-limited` is displayed with the `LIMIT` badge.
 
 ## Project structure
 
 ```
 src/
-  index.tsx    TUI entry — sidebar slot, polling, 429 detection
+  index.tsx    TUI entry — V2 Plugin.define, sidebar slot, polling
   api.ts       OpenCode Go usage API client
   auth.ts      API key resolver (auth store / env / options)
   format.ts    Theme palette, formatting, percentage and reset helpers
   types.ts     TypeScript interfaces
-  server.ts    Server plugin entry
 ```
 
 ## Development
@@ -126,6 +148,8 @@ npm run typecheck
 npm run build
 npm test
 ```
+
+To try a local build, add the directory to `~/.config/opencode/cli.json` and reload OpenCode.
 
 ## License
 
